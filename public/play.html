@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Time Auction — Play</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { touch-action: manipulation; }
+    .play-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.25rem;
+      gap: 0;
+    }
+    .top-bar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .center-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+    }
+    .big-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .bottom-bar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      padding-bottom: 1.5rem;
+    }
+    .status-msg {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-align: center;
+      min-height: 1.5em;
+    }
+    .rounds-won {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--gold);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+<div class="play-page" id="app">
+
+  <!-- ── LOBBY WAIT ──────────────────────────────────────────── -->
+  <div id="view-lobby" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:1.5rem;width:100%;max-width:440px;">
+    <div class="logo" style="font-size:1.8rem;">TIME AUCTION</div>
+    <div class="card" style="width:100%;text-align:center;">
+      <div class="card-title">Waiting for Host</div>
+      <div class="game-code" id="w-code" style="font-size:2rem;margin:0.5rem 0;"></div>
+      <div style="font-size:0.9rem;color:var(--text-dim);">You're in! Host will start the game soon.</div>
+    </div>
+    <div class="card" style="width:100%;">
+      <div class="card-title">Players Joined</div>
+      <div id="w-players" class="player-list"></div>
+    </div>
+    <div style="font-size:0.85rem;color:var(--text-dim);text-align:center;padding:0 1rem;">
+      Keep this tab open. Do not refresh.
+    </div>
+  </div>
+
+  <!-- ── ROUND ACTIVE ───────────────────────────────────────── -->
+  <div id="view-round" class="hidden" style="display:flex;flex-direction:column;align-items:center;min-height:100vh;width:100%;max-width:440px;padding:1.25rem;">
+
+    <div class="top-bar">
+      <div>
+        <div class="round-badge">Round <span id="r-num">—</span> of <span id="r-total">—</span></div>
+        <div id="r-rounds-won" class="rounds-won hidden">🏆 <span id="r-rw-count">0</span> wins</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.7rem;color:var(--text-dim);letter-spacing:0.08em;">TIME BANK</div>
+        <div class="timebank" id="r-bank">—</div>
+      </div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;width:100%;">
+      <div class="big-label" id="r-state-label">YOUR BID</div>
+      <div class="bid-timer" id="r-timer">0.0s</div>
+      <div class="status-msg" id="r-status">Bidding in progress…</div>
+    </div>
+
+    <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:0.75rem;padding-bottom:2rem;">
+      <button class="stop-btn inactive" id="stop-btn" onclick="stopBidding()">STOP</button>
+      <button class="btn btn-ghost" id="skip-btn" onclick="skipRound()"
+              style="opacity:0;pointer-events:none;min-width:160px;font-size:0.85rem;">
+        Skip Round (0s)
+      </button>
+      <div style="font-size:0.75rem;color:var(--text-dim);">Tap STOP to bid. SKIP to sit this one out.</div>
+    </div>
+
+  </div>
+
+  <!-- ── REVEAL ─────────────────────────────────────────────── -->
+  <div id="view-reveal" class="hidden" style="display:flex;flex-direction:column;align-items:center;min-height:100vh;width:100%;max-width:440px;padding:1.25rem;gap:1rem;">
+
+    <div class="top-bar">
+      <div class="round-badge">Round <span id="rv-num">—</span> — Results</div>
+      <div style="text-align:right;">
+        <div style="font-size:0.7rem;color:var(--text-dim);">TIME BANK</div>
+        <div class="timebank" id="rv-bank">—</div>
+      </div>
+    </div>
+
+    <div id="rv-winner" class="winner-banner" style="width:100%;"></div>
+
+    <div class="card" style="width:100%;text-align:center;padding:1.5rem;">
+      <div style="font-size:0.7rem;color:var(--text-dim);letter-spacing:0.1em;">WINNING BID</div>
+      <div class="bid-timer" id="rv-winning-bid" style="font-size:3rem;margin:0.4rem 0;color:var(--gold);text-shadow:0 0 30px rgba(255,215,0,0.5);"></div>
+    </div>
+
+    <div class="card" style="width:100%;text-align:center;padding:1.25rem;">
+      <div style="font-size:0.7rem;color:var(--text-dim);letter-spacing:0.1em;">YOUR BID THIS ROUND</div>
+      <div class="bid-timer" id="rv-my-bid" style="font-size:3rem;margin:0.25rem 0;"></div>
+      <div id="rv-skipped-label" class="hidden" style="font-size:0.8rem;color:var(--text-dim);margin-top:0.25rem;">Skipped — no time deducted</div>
+    </div>
+
+    <div id="rv-wait" style="font-size:0.9rem;color:var(--text-dim);text-align:center;">
+      Waiting for host to start next round…
+    </div>
+
+  </div>
+
+  <!-- ── GAME OVER ──────────────────────────────────────────── -->
+  <div id="view-gameover" class="hidden" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;width:100%;max-width:440px;gap:1.25rem;padding:1.25rem;">
+    <div class="logo" style="font-size:2rem;">GAME OVER</div>
+    <div class="card" style="width:100%;text-align:center;">
+      <div style="font-size:0.85rem;color:var(--text-dim);">ADVANTAGE WINNER</div>
+      <div id="go-winner" class="winner-banner" style="font-size:2.2rem;"></div>
+    </div>
+    <div class="card" style="width:100%;">
+      <div class="card-title">Final Leaderboard</div>
+      <div id="go-leaderboard"></div>
+    </div>
+    <a href="/" class="btn btn-ghost btn-full">Play Again</a>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const code = (params.get('code') || sessionStorage.getItem('ta_code') || '').toUpperCase();
+  const name = params.get('name') || sessionStorage.getItem('ta_name') || '';
+
+  const socket = io();
+
+  let myTimeBank = 0;
+  let roundStart = 0;
+  let timerFrame = null;
+  let myBidMs = null;
+  let myRoundsWon = 0;
+  let isStopped = false;
+  let currentRound = 0;
+  let totalRounds = 0;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function ms(val) {
+    const s = val / 1000;
+    return s >= 60
+      ? `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+      : s.toFixed(1) + 's';
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  function showView(id) {
+    ['lobby','round','reveal','gameover'].forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.classList.add('hidden');
+    });
+    const el = document.getElementById('view-' + id);
+    if (el) {
+      el.classList.remove('hidden');
+      el.classList.add('fade-in');
+    }
+  }
+
+  function updateBank(bankMs) {
+    myTimeBank = bankMs;
+    const el = document.getElementById('r-bank');
+    if (!el) return;
+    const fmted = ms(bankMs);
+    el.textContent = fmted;
+    el.className = 'timebank' + (bankMs < 30000 ? ' critical' : bankMs < 120000 ? ' low' : '');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderLobbyPlayers(ps) {
+    document.getElementById('w-players').innerHTML = ps.map(p =>
+      `<div class="player-row"><span class="pname">${escHtml(p.name)}</span>${p.name === name ? '<span class="pill pill-waiting">You</span>' : ''}</div>`
+    ).join('');
+  }
+
+  const SKIP_WINDOW_MS = 10000;
+
+  // ── Timer loop ─────────────────────────────────────────────────────────────
+  function startTimer() {
+    if (timerFrame) cancelAnimationFrame(timerFrame);
+    const el = document.getElementById('r-timer');
+
+    function tick() {
+      if (isStopped) return;
+      const elapsed = Math.min(Date.now() - roundStart, myTimeBank);
+      el.textContent = ms(elapsed);
+
+      // Update bank display
+      const remaining = myTimeBank - elapsed;
+      const bankEl = document.getElementById('r-bank');
+      if (bankEl) {
+        bankEl.textContent = ms(remaining);
+        bankEl.className = 'timebank' + (remaining < 30000 ? ' critical' : remaining < 120000 ? ' low' : '');
+      }
+
+      // Update skip button countdown
+      const skipBtn = document.getElementById('skip-btn');
+      const skipSecsLeft = Math.ceil((SKIP_WINDOW_MS - elapsed) / 1000);
+      if (elapsed < SKIP_WINDOW_MS) {
+        skipBtn.textContent = `Skip Round (${skipSecsLeft}s)`;
+      } else {
+        skipBtn.style.opacity = '0';
+        skipBtn.style.pointerEvents = 'none';
+      }
+
+      // Auto-stop if out of time
+      if (elapsed >= myTimeBank) {
+        stopBidding();
+        return;
+      }
+
+      timerFrame = requestAnimationFrame(tick);
+    }
+
+    timerFrame = requestAnimationFrame(tick);
+  }
+
+  function stopTimer() {
+    if (timerFrame) { cancelAnimationFrame(timerFrame); timerFrame = null; }
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  function lockButtons(label, timerLabel) {
+    const btn = document.getElementById('stop-btn');
+    btn.className = 'stop-btn locked';
+    btn.textContent = label;
+    const skip = document.getElementById('skip-btn');
+    skip.style.opacity = '0';
+    skip.style.pointerEvents = 'none';
+    document.getElementById('r-status').textContent = timerLabel + ' Waiting for others…';
+  }
+
+  function stopBidding() {
+    if (isStopped) return;
+    isStopped = true;
+    stopTimer();
+
+    const elapsed = Math.min(Date.now() - roundStart, myTimeBank);
+    myBidMs = elapsed;
+
+    document.getElementById('r-timer').textContent = ms(elapsed);
+    document.getElementById('r-timer').classList.add('locked');
+    lockButtons('LOCKED', 'Bid locked in!');
+
+    socket.emit('player_stop');
+  }
+
+  function skipRound() {
+    if (isStopped) return;
+    isStopped = true;
+    stopTimer();
+    myBidMs = 0;
+
+    document.getElementById('r-timer').textContent = 'SKIP';
+    document.getElementById('r-timer').classList.add('locked');
+    lockButtons('SKIPPED', 'Skipping this round.');
+
+    socket.emit('player_skip');
+  }
+
+  // ── Socket events ─────────────────────────────────────────────────────────
+  if (code && name) {
+    document.getElementById('w-code').textContent = code;
+    socket.emit('join_game', { code, name });
+  } else {
+    showToast('Missing game info. Please go back and try again.');
+  }
+
+  socket.on('joined', ({ code: c, name: n, settings, players }) => {
+    myTimeBank = settings.totalTime * 1000;
+    currentRound = 0;
+    totalRounds = settings.rounds;
+    renderLobbyPlayers(players);
+    showView('lobby');
+  });
+
+  socket.on('rejoined', ({ state, currentRound: cr, totalRounds: tr, timeBank, roundsWon: rw, roundStartTime, myBid, lastResult, players }) => {
+    myTimeBank = timeBank;
+    currentRound = cr;
+    totalRounds = tr;
+    myRoundsWon = rw;
+
+    if (state === 'lobby') {
+      renderLobbyPlayers(players);
+      showView('lobby');
+    } else if (state === 'round_active') {
+      roundStart = roundStartTime;
+      isStopped = myBid && myBid.stopped;
+      showRound(cr, tr);
+      if (isStopped) {
+        myBidMs = myBid.bid;
+        document.getElementById('r-timer').textContent = ms(myBidMs);
+        document.getElementById('r-timer').classList.add('locked');
+        document.getElementById('stop-btn').className = 'stop-btn locked';
+        document.getElementById('stop-btn').textContent = 'LOCKED';
+        document.getElementById('r-status').textContent = 'Bid locked in! Waiting for others…';
+      } else {
+        startTimer();
+        activateStopBtn();
+      }
+    } else if (state === 'round_reveal' && lastResult) {
+      showReveal(lastResult);
+    }
+  });
+
+  socket.on('lobby_update', ({ players }) => {
+    renderLobbyPlayers(players);
+  });
+
+  socket.on('round_started', ({ round, totalRounds: tr, serverTime }) => {
+    currentRound = round;
+    totalRounds = tr;
+    roundStart = serverTime;
+    isStopped = false;
+    myBidMs = null;
+
+    showRound(round, tr);
+    updateBank(myTimeBank);
+    activateStopBtn();
+    startTimer();
+  });
+
+  function showRound(round, tr) {
+    document.getElementById('r-num').textContent = round;
+    document.getElementById('r-total').textContent = tr;
+    document.getElementById('r-timer').textContent = '0.0s';
+    document.getElementById('r-timer').className = 'bid-timer';
+    document.getElementById('r-status').textContent = 'Bidding in progress…';
+
+    const rwEl = document.getElementById('r-rounds-won');
+    if (myRoundsWon > 0) {
+      rwEl.classList.remove('hidden');
+      document.getElementById('r-rw-count').textContent = myRoundsWon;
+    }
+
+    showView('round');
+  }
+
+  function activateStopBtn() {
+    const btn = document.getElementById('stop-btn');
+    btn.className = 'stop-btn';
+    btn.textContent = 'STOP';
+    const skip = document.getElementById('skip-btn');
+    skip.style.opacity = '1';
+    skip.style.pointerEvents = 'auto';
+  }
+
+  socket.on('bid_recorded', ({ bid, skipped }) => {
+    myBidMs = bid;
+    stopTimer();
+    if (skipped) {
+      document.getElementById('r-timer').textContent = 'SKIP';
+      lockButtons('SKIPPED', 'Skipping this round.');
+    } else {
+      document.getElementById('r-timer').textContent = ms(bid);
+      lockButtons('LOCKED', 'Bid locked in!');
+    }
+    document.getElementById('r-timer').classList.add('locked');
+  });
+
+  socket.on('round_revealed', (result) => {
+    stopTimer();
+    showReveal(result);
+  });
+
+  function showReveal(result) {
+    const myPlayer = result.players.find(p => p.name === name);
+    if (myPlayer) {
+      myTimeBank = myPlayer.timeBank;
+      myRoundsWon = myPlayer.roundsWon;
+    }
+
+    const amIWinner = result.winners.includes(name);
+
+    // Winner banner
+    const winnerEl = document.getElementById('rv-winner');
+    if (result.isTie) {
+      winnerEl.textContent = `TIE: ${result.winners.join(' & ')}`;
+      winnerEl.style.cssText = '';
+    } else if (amIWinner) {
+      winnerEl.textContent = '🏆 YOU WIN THIS ROUND!';
+      winnerEl.style.cssText = '';
+    } else {
+      winnerEl.textContent = `🏆 ${result.winners[0]} wins the round`;
+      winnerEl.style.color = 'var(--text-dim)';
+      winnerEl.style.textShadow = 'none';
+      winnerEl.style.fontSize = '1.3rem';
+    }
+
+    document.getElementById('rv-num').textContent = result.round;
+    document.getElementById('rv-bank').textContent = myPlayer ? ms(myPlayer.timeBank) : '—';
+
+    // Winning bid (always shown — who won and for how much is public)
+    const winningBid = result.bids[0]?.bid ?? 0;
+    document.getElementById('rv-winning-bid').textContent = ms(winningBid);
+
+    // Your own bid only
+    const myBidEntry = result.bids.find(b => b.name === name);
+    const myBid = myBidEntry?.bid ?? 0;
+    const wasSkipped = myBidEntry?.skipped ?? false;
+    document.getElementById('rv-my-bid').textContent = wasSkipped ? 'SKIPPED' : ms(myBid);
+    document.getElementById('rv-my-bid').className = 'bid-timer' + (amIWinner ? ' winner-glow' : ' locked');
+    document.getElementById('rv-skipped-label').classList.toggle('hidden', !wasSkipped);
+
+    document.getElementById('rv-wait').textContent =
+      result.isLastRound ? 'Game over! Waiting for final results…' : 'Waiting for host to start next round…';
+
+    showView('reveal');
+  }
+
+  socket.on('game_over', ({ winner, leaderboard }) => {
+    document.getElementById('go-winner').textContent = winner === name ? '🏆 YOU!' : winner;
+    document.getElementById('go-leaderboard').innerHTML = leaderboard.map((p, i) =>
+      `<div class="lb-row ${p.name === name ? 'stopped' : ''}">
+        <div class="lb-rank">${i + 1}</div>
+        <div class="lb-name">${escHtml(p.name)}${p.name === name ? ' <span class="pill pill-waiting">you</span>' : ''}</div>
+        <div class="lb-wins">${p.roundsWon}W</div>
+        <div class="lb-time">${ms(p.timeRemaining)} left</div>
+      </div>`
+    ).join('');
+    showView('gameover');
+  });
+
+  socket.on('admin_disconnected', () => {
+    showToast('Host disconnected. Waiting for them to reconnect…');
+  });
+
+  socket.on('error', ({ message }) => showToast(message));
+
+  // Warn on accidental navigation
+  window.addEventListener('beforeunload', e => {
+    e.preventDefault();
+    e.returnValue = '';
+  });
+</script>
+</body>
+</html>

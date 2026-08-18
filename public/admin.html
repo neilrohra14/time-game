@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Auction — Host</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .admin-header {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .admin-body {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .progress-bar-wrap { background: var(--surface2); border-radius: 999px; height: 6px; overflow: hidden; }
+    .progress-bar { height: 100%; background: var(--cyan); border-radius: 999px; transition: width 0.3s; }
+    .btn-row { display: flex; gap: 0.75rem; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .stat-box { background: var(--surface2); border-radius: 10px; padding: 0.9rem 1rem; }
+    .stat-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem; }
+    .stat-val { font-family: 'Orbitron', monospace; font-size: 1.6rem; font-weight: 700; }
+    .stat-val.cyan { color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<div class="page" id="app" style="align-items:center;padding-top:2rem;padding-bottom:2rem;">
+
+  <!-- ── LOBBY ──────────────────────────────────────────────── -->
+  <div id="view-lobby" class="admin-body fade-in">
+    <div class="admin-header">
+      <div class="logo" style="font-size:1.6rem;">TIME AUCTION</div>
+      <div style="text-align:right;">
+        <div style="font-size:0.7rem;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;">Game Code</div>
+        <div class="game-code" id="l-code" style="font-size:2.2rem;">——</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Players in Lobby <span id="l-count" style="color:var(--text-dim);">(0)</span></div>
+      <div class="player-list" id="l-players">
+        <div class="dim" style="font-size:0.9rem;">Waiting for players to join…</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(0,220,255,0.04);border-color:rgba(0,220,255,0.3);">
+      <div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:0.75rem;">
+        Share the code above. Players go to <strong style="color:var(--cyan);" id="l-url">this site</strong> and enter it.
+      </div>
+      <div id="l-settings" class="dim" style="font-size:0.85rem;"></div>
+    </div>
+
+    <button class="btn btn-primary btn-full" id="btn-start-game" onclick="startRound()" disabled>
+      Start Round 1
+    </button>
+  </div>
+
+  <!-- ── ROUND ACTIVE ───────────────────────────────────────── -->
+  <div id="view-round" class="admin-body fade-in hidden">
+    <div class="admin-header">
+      <div>
+        <div class="round-badge">Round <span id="r-num">—</span> of <span id="r-total">—</span></div>
+        <div style="font-size:0.85rem;color:var(--text-dim);margin-top:0.2rem;">Game Code: <span id="r-code" class="mono" style="color:var(--cyan);letter-spacing:0.1em;"></span></div>
+      </div>
+      <div style="display:flex;gap:0.75rem;">
+        <div class="stat-box" style="min-width:110px;text-align:center;">
+          <div class="stat-label">Elapsed</div>
+          <div class="stat-val cyan" id="r-elapsed">0.0s</div>
+        </div>
+        <div class="stat-box" style="min-width:110px;text-align:center;">
+          <div class="stat-label">Stopped</div>
+          <div class="stat-val cyan"><span id="r-stopped">0</span>/<span id="r-total2">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Bidding Status</div>
+      <div class="player-list" id="r-players"></div>
+      <div class="divider"></div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="r-progress" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="card" style="text-align:center;padding:1rem;">
+      <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.5rem;">Auto-reveals when everyone stops</div>
+      <button class="btn btn-danger" onclick="forceReveal()" style="min-width:200px;">
+        Reveal Now
+      </button>
+    </div>
+  </div>
+
+  <!-- ── REVEAL ────────────────────────────────────────────── -->
+  <div id="view-reveal" class="admin-body fade-in hidden">
+    <div class="admin-header">
+      <div>
+        <div class="round-badge">Round <span id="rv-num">—</span> of <span id="rv-total">—</span> — Results</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-dim);">Code: <span id="rv-code" class="mono" style="color:var(--cyan);letter-spacing:0.1em;"></span></div>
+    </div>
+
+    <div class="card">
+      <div id="rv-winner" class="winner-banner"></div>
+      <div class="divider"></div>
+      <div class="card-title">Round Bids</div>
+      <div id="rv-bids"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Time Banks Remaining</div>
+      <div class="player-list" id="rv-players"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary btn-full" id="btn-next" onclick="nextRound()">
+        Next Round →
+      </button>
+    </div>
+  </div>
+
+  <!-- ── GAME OVER ──────────────────────────────────────────── -->
+  <div id="view-gameover" class="admin-body fade-in hidden">
+    <div class="logo">GAME OVER</div>
+
+    <div class="card" style="text-align:center;">
+      <div style="font-size:0.9rem;color:var(--text-dim);margin-bottom:0.5rem;">ADVANTAGE WINNER</div>
+      <div id="go-winner" class="winner-banner" style="font-size:2.5rem;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Final Leaderboard</div>
+      <div id="go-leaderboard"></div>
+    </div>
+
+    <a href="/" class="btn btn-ghost btn-full">Play Again</a>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const params = new URLSearchParams(location.search);
+  let gameCode = params.get('code') || sessionStorage.getItem('ta_code') || '';
+  let state = 'lobby';
+  let currentRound = 0;
+  let totalRounds = 0;
+  let players = [];
+  let elapsedFrame = null;
+  let adminRoundStart = 0;
+
+  function startElapsedTimer(serverTime) {
+    adminRoundStart = serverTime;
+    if (elapsedFrame) cancelAnimationFrame(elapsedFrame);
+    function tick() {
+      const el = document.getElementById('r-elapsed');
+      if (el) el.textContent = ((Date.now() - adminRoundStart) / 1000).toFixed(1) + 's';
+      elapsedFrame = requestAnimationFrame(tick);
+    }
+    elapsedFrame = requestAnimationFrame(tick);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedFrame) { cancelAnimationFrame(elapsedFrame); elapsedFrame = null; }
+    const el = document.getElementById('r-elapsed');
+    if (el) el.textContent = '0.0s';
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function ms(ms) {
+    const s = ms / 1000;
+    return s >= 60
+      ? `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+      : s.toFixed(1) + 's';
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function showView(id) {
+    ['lobby','round','reveal','gameover'].forEach(v =>
+      document.getElementById('view-' + v).classList.add('hidden')
+    );
+    const el = document.getElementById('view-' + id);
+    el.classList.remove('hidden');
+    el.classList.add('fade-in');
+  }
+
+  function renderLobbyPlayers(ps) {
+    players = ps;
+    const el = document.getElementById('l-players');
+    if (!ps.length) {
+      el.innerHTML = '<div class="dim" style="font-size:.9rem;">Waiting for players to join…</div>';
+    } else {
+      el.innerHTML = ps.map(p =>
+        `<div class="player-row"><span class="pname">${escHtml(p.name)}</span><span class="pill pill-waiting">Ready</span></div>`
+      ).join('');
+    }
+    document.getElementById('l-count').textContent = `(${ps.length})`;
+    document.getElementById('btn-start-game').disabled = ps.length === 0;
+  }
+
+  function renderRoundPlayers(ps, bids) {
+    const el = document.getElementById('r-players');
+    el.innerHTML = ps.map(p => {
+      const bid = bids && bids[p.id];
+      const stopped = bid && bid.stopped;
+      return `<div class="player-row ${stopped ? 'stopped' : 'running'}">
+        <span class="pname">${escHtml(p.name)}</span>
+        <span class="pill ${stopped ? 'pill-stopped' : 'pill-running'}">${stopped ? 'STOPPED' : 'BIDDING ⏱'}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderRevealPlayers(ps) {
+    document.getElementById('rv-players').innerHTML = ps.map(p => {
+      const pct = totalRounds > 0 ? (p.timeBank / (p.timeBank + 1)) : 1; // just for display
+      return `<div class="player-row">
+        <span class="pname">${escHtml(p.name)}</span>
+        <span class="bid-val mono">${ms(p.timeBank)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  document.getElementById('l-url').textContent = location.origin;
+
+  if (gameCode) {
+    document.getElementById('l-code').textContent = gameCode;
+    document.getElementById('r-code').textContent = gameCode;
+    document.getElementById('rv-code').textContent = gameCode;
+    socket.emit('admin_reconnect', { code: gameCode });
+  } else {
+    showToast('No game found. Go back and create one.');
+  }
+
+  // ── Socket events ─────────────────────────────────────────────────────────
+  socket.on('game_created', ({ code, settings }) => {
+    gameCode = code;
+    totalRounds = settings.rounds;
+    document.getElementById('l-code').textContent = code;
+    document.getElementById('r-code').textContent = code;
+    document.getElementById('rv-code').textContent = code;
+    document.getElementById('l-settings').textContent =
+      `${Math.floor(settings.totalTime/60)}m${settings.totalTime%60 > 0 ? settings.totalTime%60+'s' : ''} per player · ${settings.rounds} rounds`;
+    showView('lobby');
+  });
+
+  socket.on('admin_reconnected', ({ code, settings, state: s, currentRound: cr, roundStartTime, players: ps, results }) => {
+    gameCode = code;
+    state = s;
+    currentRound = cr;
+    totalRounds = settings.rounds;
+    players = ps;
+
+    document.getElementById('l-settings').textContent =
+      `${Math.floor(settings.totalTime/60)}m${settings.totalTime%60>0?settings.totalTime%60+'s':''} per player · ${settings.rounds} rounds`;
+
+    if (s === 'lobby') {
+      renderLobbyPlayers(ps);
+      showView('lobby');
+    } else if (s === 'round_active') {
+      document.getElementById('r-num').textContent = cr;
+      document.getElementById('r-total').textContent = totalRounds;
+      document.getElementById('r-total2').textContent = ps.length;
+      renderRoundPlayers(ps, null);
+      startElapsedTimer(roundStartTime || Date.now());
+      showView('round');
+    } else if (s === 'round_reveal' && results.length) {
+      showReveal(results[results.length - 1]);
+    } else if (s === 'finished' && results.length) {
+      // Will get game_over re-emitted? No — reload last result
+      showView('gameover');
+    }
+  });
+
+  socket.on('lobby_update', ({ players: ps }) => {
+    renderLobbyPlayers(ps);
+  });
+
+  socket.on('round_started', ({ round, totalRounds: tr, serverTime }) => {
+    state = 'round_active';
+    currentRound = round;
+    totalRounds = tr;
+
+    document.getElementById('r-num').textContent = round;
+    document.getElementById('r-total').textContent = tr;
+    document.getElementById('r-total2').textContent = players.length;
+    document.getElementById('r-stopped').textContent = '0';
+    renderRoundPlayers(players, null);
+    document.getElementById('r-progress').style.width = '0%';
+
+    startElapsedTimer(serverTime);
+    showView('round');
+  });
+
+  // Track which players have stopped (client-side map)
+  const roundStopMap = {};
+
+  socket.on('bidding_progress', ({ stoppedCount, totalPlayers, playerName }) => {
+    roundStopMap[playerName] = true;
+    document.getElementById('r-stopped').textContent = stoppedCount;
+    const pct = totalPlayers > 0 ? (stoppedCount / totalPlayers * 100) : 0;
+    document.getElementById('r-progress').style.width = pct + '%';
+
+    // Update the specific player row
+    const rows = document.querySelectorAll('#r-players .player-row');
+    rows.forEach(row => {
+      const name = row.querySelector('.pname').textContent;
+      if (name === playerName) {
+        row.classList.remove('running');
+        row.classList.add('stopped');
+        row.querySelector('.pill').className = 'pill pill-stopped';
+        row.querySelector('.pill').textContent = 'STOPPED';
+      }
+    });
+  });
+
+  socket.on('round_revealed', (result) => {
+    state = 'round_reveal';
+    players = result.players;
+    stopElapsedTimer();
+    showReveal(result);
+  });
+
+  function showReveal(result) {
+    document.getElementById('rv-num').textContent = result.round;
+    document.getElementById('rv-total').textContent = result.totalRounds;
+
+    const winnerEl = document.getElementById('rv-winner');
+    if (result.isTie) {
+      winnerEl.textContent = `TIE: ${result.winners.join(' & ')}`;
+    } else {
+      winnerEl.textContent = `🏆 ${result.winners[0]} WINS THE ROUND`;
+    }
+
+    const bidsEl = document.getElementById('rv-bids');
+    bidsEl.innerHTML = result.bids.map((b, i) => {
+      const isWinner = result.winners.includes(b.name);
+      return `<div class="bid-reveal-row ${isWinner ? 'top' : ''}">
+        <span class="bid-name">${isWinner ? '🏆 ' : ''}${escHtml(b.name)}</span>
+        <span class="bid-val">${ms(b.bid)}</span>
+      </div>`;
+    }).join('');
+
+    renderRevealPlayers(result.players);
+
+    const btnNext = document.getElementById('btn-next');
+    if (result.isLastRound) {
+      btnNext.textContent = 'View Final Results';
+    } else {
+      btnNext.textContent = `Start Round ${result.round + 1} →`;
+    }
+
+    showView('reveal');
+  }
+
+  socket.on('game_over', ({ winner, leaderboard }) => {
+    document.getElementById('go-winner').textContent = winner;
+    document.getElementById('go-leaderboard').innerHTML = leaderboard.map((p, i) =>
+      `<div class="lb-row">
+        <div class="lb-rank">${i + 1}</div>
+        <div class="lb-name">${escHtml(p.name)}</div>
+        <div class="lb-wins">${p.roundsWon}W</div>
+        <div class="lb-time">${ms(p.timeRemaining)} left</div>
+      </div>`
+    ).join('');
+    showView('gameover');
+  });
+
+  socket.on('error', ({ message }) => showToast(message));
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  function startRound() {
+    socket.emit('start_round');
+  }
+
+  function forceReveal() {
+    socket.emit('reveal_round');
+  }
+
+  function nextRound() {
+    socket.emit('start_round');
+  }
+
+  // Warn on accidental navigation
+  window.addEventListener('beforeunload', e => {
+    if (state !== 'lobby' && state !== 'finished') {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+</script>
+</body>
+</html>

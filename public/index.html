@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Auction</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="page">
+  <div class="logo">
+    TIME AUCTION
+    <small>SOCIAL STRATEGY GAME</small>
+  </div>
+
+  <!-- Landing buttons -->
+  <div id="landing" style="display:flex;flex-direction:column;gap:1rem;width:100%;max-width:400px;">
+    <button class="btn btn-primary btn-full" onclick="showSection('host-section')">
+      ⏱ Host a Game
+    </button>
+    <button class="btn btn-ghost btn-full" onclick="showSection('join-section')">
+      Join a Game
+    </button>
+  </div>
+
+  <!-- Host section -->
+  <div id="host-section" class="card hidden fade-in">
+    <div class="card-title">New Game Settings</div>
+    <div class="field">
+      <label>Time per player (seconds)</label>
+      <input type="number" id="h-time" value="600" min="60" max="3600" placeholder="600">
+    </div>
+    <div class="field">
+      <label>Number of rounds</label>
+      <input type="number" id="h-rounds" value="19" min="1" max="50" placeholder="19">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="createGame()">Create Game</button>
+    <div class="divider"></div>
+    <button class="btn btn-ghost btn-full" onclick="showSection(null)">← Back</button>
+  </div>
+
+  <!-- Join section -->
+  <div id="join-section" class="card hidden fade-in">
+    <div class="card-title">Join a Game</div>
+    <div class="field">
+      <label>Game Code</label>
+      <input type="text" id="j-code" placeholder="A1B2C3" maxlength="6"
+             style="text-transform:uppercase;letter-spacing:0.15em;font-family:'Orbitron',monospace;font-size:1.2rem;text-align:center;"
+             oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="field">
+      <label>Your Name</label>
+      <input type="text" id="j-name" placeholder="e.g. Alex" maxlength="20">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="joinGame()">Join →</button>
+    <div class="divider"></div>
+    <button class="btn btn-ghost btn-full" onclick="showSection(null)">← Back</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+
+  function showSection(id) {
+    document.getElementById('landing').classList.toggle('hidden', !!id);
+    document.getElementById('host-section').classList.toggle('hidden', id !== 'host-section');
+    document.getElementById('join-section').classList.toggle('hidden', id !== 'join-section');
+  }
+
+  function showToast(msg, duration = 3000) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  function createGame() {
+    const totalTime = parseInt(document.getElementById('h-time').value) || 600;
+    const rounds = parseInt(document.getElementById('h-rounds').value) || 19;
+    socket.emit('create_game', { totalTime, rounds });
+  }
+
+  function joinGame() {
+    const code = document.getElementById('j-code').value.toUpperCase().trim();
+    const name = document.getElementById('j-name').value.trim();
+    if (!code || !name) return showToast('Please enter both a code and your name.');
+    // Navigate directly — play.html handles the socket join so there's no
+    // double-join race condition between index.html and play.html sockets.
+    window.location.href = `/play.html?code=${code}&name=${encodeURIComponent(name)}`;
+  }
+
+  // Allow Enter key to submit
+  document.getElementById('j-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') joinGame();
+  });
+  document.getElementById('j-code').addEventListener('keydown', e => {
+    if (e.key === 'Enter') joinGame();
+  });
+
+  socket.on('game_created', ({ code, settings }) => {
+    sessionStorage.setItem('ta_code', code);
+    sessionStorage.setItem('ta_role', 'admin');
+    window.location.href = `/admin.html?code=${code}`;
+  });
+
+  socket.on('error', ({ message }) => {
+    showToast(message);
+  });
+</script>
+</body>
+</html>
