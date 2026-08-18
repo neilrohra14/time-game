@@ -29,11 +29,20 @@
     .stat-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem; }
     .stat-val { font-family: 'Orbitron', monospace; font-size: 1.6rem; font-weight: 700; }
     .stat-val.cyan { color: var(--cyan); }
+    .private-hint { font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.08em; }
   </style>
 </head>
 <body>
 
 <div class="page" id="app" style="align-items:center;padding-top:2rem;padding-bottom:2rem;">
+
+  <!-- Floating privacy toggle (visible across all views) -->
+  <div style="position:fixed;top:1rem;right:1rem;z-index:100;">
+    <button class="btn btn-ghost" id="btn-privacy" onclick="togglePrivacy()"
+            style="font-size:0.8rem;padding:0.5rem 0.9rem;">
+      🔒 Hide Sensitive
+    </button>
+  </div>
 
   <!-- ── LOBBY ──────────────────────────────────────────────── -->
   <div id="view-lobby" class="admin-body fade-in">
@@ -160,6 +169,22 @@
   let players = [];
   let elapsedFrame = null;
   let adminRoundStart = 0;
+  let privacyMode = false;
+  let lastRevealResult = null;
+
+  function togglePrivacy() {
+    privacyMode = !privacyMode;
+    const btn = document.getElementById('btn-privacy');
+    btn.textContent = privacyMode ? '👁 Show All' : '🔒 Hide Sensitive';
+    btn.style.borderColor = privacyMode ? 'var(--orange)' : '';
+    btn.style.color = privacyMode ? 'var(--orange)' : '';
+    // Re-render current reveal if visible
+    if (lastRevealResult) showReveal(lastRevealResult);
+  }
+
+  function sv(val) {
+    return privacyMode ? '—' : val;
+  }
 
   function startElapsedTimer(serverTime) {
     adminRoundStart = serverTime;
@@ -344,6 +369,8 @@
   });
 
   function showReveal(result) {
+    lastRevealResult = result;
+
     document.getElementById('rv-num').textContent = result.round;
     document.getElementById('rv-total').textContent = result.totalRounds;
 
@@ -354,16 +381,24 @@
       winnerEl.textContent = `🏆 ${result.winners[0]} WINS THE ROUND`;
     }
 
+    // Bids — sensitive in privacy mode
     const bidsEl = document.getElementById('rv-bids');
-    bidsEl.innerHTML = result.bids.map((b, i) => {
+    bidsEl.innerHTML = result.bids.map((b) => {
       const isWinner = result.winners.includes(b.name);
+      const bidLabel = b.skipped ? sv('SKIP') : sv(ms(b.bid));
       return `<div class="bid-reveal-row ${isWinner ? 'top' : ''}">
         <span class="bid-name">${isWinner ? '🏆 ' : ''}${escHtml(b.name)}</span>
-        <span class="bid-val">${ms(b.bid)}</span>
+        <span class="bid-val">${bidLabel}</span>
       </div>`;
     }).join('');
 
-    renderRevealPlayers(result.players);
+    // Time banks — sensitive in privacy mode
+    document.getElementById('rv-players').innerHTML = result.players.map(p =>
+      `<div class="player-row">
+        <span class="pname">${escHtml(p.name)}</span>
+        <span class="bid-val mono">${sv(ms(p.timeBank))}</span>
+      </div>`
+    ).join('');
 
     const btnNext = document.getElementById('btn-next');
     if (result.isLastRound) {

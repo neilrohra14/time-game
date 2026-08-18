@@ -161,7 +161,8 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ── Player joins lobby ────────────────────────────────────────────────────
+  // ── Player joins or rejoins (unified — handles fresh join, lobby reconnect,
+  //    and mid-game reconnect transparently) ──────────────────────────────────
   socket.on('join_game', ({ code, name }) => {
     code = (code || '').toUpperCase().trim();
     name = (name || '').trim().substring(0, 20);
@@ -170,31 +171,81 @@ io.on('connection', (socket) => {
 
     const game = games.get(code);
     if (!game) return socket.emit('error', { message: 'Game not found. Check the code and try again.' });
-    if (game.state !== 'lobby') return socket.emit('error', { message: 'Game already in progress. Ask the host to let you rejoin.' });
 
-    const nameTaken = Array.from(game.players.values()).some(
-      p => p.name.toLowerCase() === name.toLowerCase()
-    );
-    if (nameTaken) return socket.emit('error', { message: 'That name is already taken. Pick another.' });
+    // Find any existing player slot with this name
+    let existingId = null;
+    for (const [pid, player] of game.players.entries()) {
+      if (player.name.toLowerCase() === name.toLowerCase()) {
+        existingId = pid;
+        break;
+      }
+    }
 
-    game.players.set(socket.id, {
-      id: socket.id,
-      name,
-      timeBank: game.settings.totalTime * 1000,
-      bidsHistory: [],
-      roundsWon: 0,
-    });
+    if (game.state === 'lobby') {
+      if (existingId && existingId !== socket.id) {
+        // Reconnect during lobby: transfer slot to new socket
+        const player = game.players.get(existingId);
+        game.players.delete(existingId);
+        player.id = socket.id;
+        game.players.set(socket.id, player);
+      } else if (!existingId) {
+        // Fresh join
+        game.players.set(socket.id, {
+          id: socket.id,
+          name,
+          timeBank: game.settings.totalTime * 1000,
+          bidsHistory: [],
+          roundsWon: 0,
+        });
+      }
 
-    socket.join(code);
-    socket.data.gameCode = code;
-    socket.data.isAdmin = false;
-    socket.data.playerName = name;
+      socket.join(code);
+      socket.data.gameCode = code;
+      socket.data.isAdmin = false;
+      socket.data.playerName = name;
 
-    socket.emit('joined', { code, name, settings: game.settings, players: getPlayerList(game) });
-    io.to(code).emit('lobby_update', { players: getPlayerList(game) });
+      socket.emit('joined', { code, name, settings: game.settings, players: getPlayerList(game) });
+      io.to(code).emit('lobby_update', { players: getPlayerList(game) });
+
+    } else {
+      // Game in progress — must be a reconnect
+      if (!existingId) return socket.emit('error', { message: 'Game already in progress and your name was not found.' });
+
+      // Transfer player slot to new socket
+      const player = game.players.get(existingId);
+      game.players.delete(existingId);
+      player.id = socket.id;
+      game.players.set(socket.id, player);
+
+      if (game.roundBids.has(existingId)) {
+        const bid = game.roundBids.get(existingId);
+        game.roundBids.delete(existingId);
+        game.roundBids.set(socket.id, bid);
+      }
+
+      socket.join(code);
+      socket.data.gameCode = code;
+      socket.data.isAdmin = false;
+      socket.data.playerName = name;
+
+      socket.emit('rejoined', {
+        code,
+        name,
+        settings: game.settings,
+        state: game.state,
+        currentRound: game.currentRound,
+        totalRounds: game.settings.rounds,
+        players: getPlayerList(game),
+        timeBank: player.timeBank,
+        roundsWon: player.roundsWon,
+        roundStartTime: game.roundStartTime,
+        myBid: game.roundBids.get(socket.id) || null,
+        lastResult: game.results[game.results.length - 1] || null,
+      });
+    }
   });
 
-  // ── Player rejoins mid-game (socket reconnected) ──────────────────────────
+  // ── Legacy rejoin alias (kept for safety) ────────────────────────────────
   socket.on('rejoin_game', ({ code, name }) => {
     code = (code || '').toUpperCase().trim();
     name = (name || '').trim();
@@ -202,7 +253,6 @@ io.on('connection', (socket) => {
     const game = games.get(code);
     if (!game) return socket.emit('error', { message: 'Game not found.' });
 
-    // Find existing player by name
     let existingId = null;
     for (const [pid, player] of game.players.entries()) {
       if (player.name.toLowerCase() === name.toLowerCase()) {
@@ -213,13 +263,11 @@ io.on('connection', (socket) => {
 
     if (!existingId) return socket.emit('error', { message: 'Player not found in this game.' });
 
-    // Move player data to new socket id
     const player = game.players.get(existingId);
     game.players.delete(existingId);
     player.id = socket.id;
     game.players.set(socket.id, player);
 
-    // Update roundBids reference if mid-round
     if (game.roundBids.has(existingId)) {
       const bid = game.roundBids.get(existingId);
       game.roundBids.delete(existingId);

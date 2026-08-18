@@ -144,6 +144,11 @@
       <div id="rv-skipped-label" class="hidden" style="font-size:0.8rem;color:var(--text-dim);margin-top:0.25rem;">Skipped — no time deducted</div>
     </div>
 
+    <div class="card" style="width:100%;">
+      <div class="card-title">Standings</div>
+      <div id="rv-standings"></div>
+    </div>
+
     <div id="rv-wait" style="font-size:0.9rem;color:var(--text-dim);text-align:center;">
       Waiting for host to start next round…
     </div>
@@ -317,12 +322,16 @@
   }
 
   // ── Socket events ─────────────────────────────────────────────────────────
-  if (code && name) {
-    document.getElementById('w-code').textContent = code;
-    socket.emit('join_game', { code, name });
-  } else {
+  if (!code || !name) {
     showToast('Missing game info. Please go back and try again.');
+  } else {
+    document.getElementById('w-code').textContent = code;
   }
+
+  // Re-emit join_game on every connect (initial + socket reconnects after phone lock/drop)
+  socket.on('connect', () => {
+    if (code && name) socket.emit('join_game', { code, name });
+  });
 
   socket.on('joined', ({ code: c, name: n, settings, players }) => {
     myTimeBank = settings.totalTime * 1000;
@@ -459,6 +468,16 @@
     document.getElementById('rv-my-bid').textContent = wasSkipped ? 'SKIPPED' : ms(myBid);
     document.getElementById('rv-my-bid').className = 'bid-timer' + (amIWinner ? ' winner-glow' : ' locked');
     document.getElementById('rv-skipped-label').classList.toggle('hidden', !wasSkipped);
+
+    // Standings — rounds won only (no time banks, keeps bids secret)
+    const sorted = [...result.players].sort((a, b) => b.roundsWon - a.roundsWon);
+    document.getElementById('rv-standings').innerHTML = sorted.map((p, i) => `
+      <div class="lb-row ${p.name === name ? 'stopped' : ''}">
+        <div class="lb-rank">${i + 1}</div>
+        <div class="lb-name">${escHtml(p.name)}${p.name === name ? ' <span class="pill pill-waiting">you</span>' : ''}</div>
+        <div class="lb-wins" style="font-family:'Orbitron',monospace;font-size:0.9rem;color:var(--cyan);">${p.roundsWon}W</div>
+      </div>`
+    ).join('');
 
     document.getElementById('rv-wait').textContent =
       result.isLastRound ? 'Game over! Waiting for final results…' : 'Waiting for host to start next round…';
