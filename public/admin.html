@@ -192,6 +192,7 @@
   let adminRoundStart = 0;
   let privacyMode = false;
   let lastRevealResult = null;
+  let lastGameoverData = null;
   let roundDetailVisible = false;
 
   function togglePrivacy() {
@@ -362,9 +363,8 @@
       showView('round');
     } else if (s === 'round_reveal' && results.length) {
       showReveal(results[results.length - 1]);
-    } else if (s === 'finished' && results.length) {
-      // Will get game_over re-emitted? No — reload last result
-      showView('gameover');
+    } else if (s === 'finished') {
+      socket.emit('request_game_over');
     }
   });
 
@@ -461,23 +461,40 @@
     const btnNext = document.getElementById('btn-next');
     if (result.isLastRound) {
       btnNext.textContent = 'View Final Results';
+      btnNext.onclick = showFinalResults;
     } else {
       btnNext.textContent = `Start Round ${result.round + 1} →`;
+      btnNext.onclick = nextRound;
     }
 
     showView('reveal');
   }
 
-  socket.on('game_over', ({ winner, leaderboard }) => {
+  function renderGameover({ winner, leaderboard }) {
     document.getElementById('go-winner').textContent = winner;
     document.getElementById('go-leaderboard').innerHTML = leaderboard.map((p, i) =>
       `<div class="lb-row">
         <div class="lb-rank">${i + 1}</div>
         <div class="lb-name">${escHtml(p.name)}</div>
         <div class="lb-wins">${p.roundsWon}W</div>
-        <div class="lb-time">${ms(p.timeRemaining)} left</div>
+        <div class="lb-time">${sv(ms(p.timeRemaining))} left</div>
       </div>`
     ).join('');
+  }
+
+  function showFinalResults() {
+    if (lastGameoverData) {
+      renderGameover(lastGameoverData);
+      showView('gameover');
+    } else {
+      // game_over may have been missed — ask the server to re-send it
+      socket.emit('request_game_over');
+    }
+  }
+
+  socket.on('game_over', (data) => {
+    lastGameoverData = data;
+    renderGameover(data);
     showView('gameover');
   });
 

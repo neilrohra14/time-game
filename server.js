@@ -389,6 +389,27 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Admin requests game over data (missed the event or reconnected) ───────
+  socket.on('request_game_over', () => {
+    const game = games.get(socket.data.gameCode);
+    if (!game || socket.id !== game.adminId || game.state !== 'finished') return;
+
+    const players = Array.from(game.players.values()).slice();
+    players.sort((a, b) => {
+      if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon;
+      return b.timeBank - a.timeBank;
+    });
+
+    socket.emit('game_over', {
+      winner: players[0]?.name ?? 'Nobody',
+      leaderboard: players.map(p => ({
+        name: p.name,
+        roundsWon: p.roundsWon,
+        timeRemaining: p.timeBank,
+      })),
+    });
+  });
+
   // ── Admin forces reveal ───────────────────────────────────────────────────
   socket.on('reveal_round', () => {
     const game = games.get(socket.data.gameCode);
